@@ -40,8 +40,8 @@ from collections import Counter;
 
 K = 8;
 nb_PCA_components = 14
-nb_drivers = 100000; #nb of travels for clustering
-nb_drivers_choices = 100000; #nb of travels for choosing the PCA components and K numbers
+nb_drivers = 1000; #nb of travels for clustering
+nb_drivers_choices = 1000; #nb of travels for choosing the PCA components and K numbers
 k_range = 20; #The range in which we will search the best K
 address = '/Users/axel/Desktop/driver_classification/';
 
@@ -53,13 +53,13 @@ K_CHOICE = False;
 CLUSTER_COMPOSITION = False;
 PCA_RESULTS = False;
 INCLUDING_DATA_PLOT = False; #Not really sensible, would take too long
-FEATURES_RESULTS = False;
+FEATURES_RESULTS = True;
 INCLUDING_DATA_PLOT_2 = False;#Same as just above
-VARIANCES_PER_FEATURES = False;
+VARIANCES_PER_FEATURES = True;
 GROUP_BY_ID = True;
 CORRELATION_WITH_CRASHES = True;
 INCLUDE_CRASHES = False;
-FULL_RUN = False;
+FULL_RUN = True;
 
 
 
@@ -192,6 +192,7 @@ def group_by_id(data):
     idx = list(a.elements());
     idx = list(set(idx));
     id = [[i] for i in idx];
+    print('There are ', len(id), ' drivers');
     for i in range(len(data)):
         for j in range(len(id)):
             if(len(id[j]) > 1):
@@ -265,8 +266,6 @@ def getdata(file_name, selected_features, nb_drivers):
 #3 : Get the data
 
 if(DATA_OBSERVATION or
-PCA_CHOICE or
-K_CHOICE or
 CLUSTER_COMPOSITION or
 PCA_RESULTS or
 FEATURES_RESULTS or 
@@ -275,6 +274,9 @@ CORRELATION_WITH_CRASHES or
 INCLUDE_CRASHES or
 FULL_RUN ):
     data, crashes = getdata(address +'report_trip_201808211027.csv', selected_Features, nb_drivers);
+    
+if(PCA_CHOICE or
+K_CHOICE ):
     data_choices, crashes_choices = getdata(address + 'report_trip_201808211027.csv', selected_Features, nb_drivers_choices);
 
 
@@ -526,7 +528,6 @@ if(CORRELATION_WITH_CRASHES):
     for i in range(len(y_kmeans_reverse)):
         for j in range(4):
             l[j][y_kmeans_reverse[i]] += crashes[i][j];
-    print(l);
     for i in range(4):
         fig = plt.figure();
         plt.xlabel('Clusters' );
@@ -538,8 +539,8 @@ if(CORRELATION_WITH_CRASHES):
 
 if(FEATURES_RESULTS):
     pdf_features_results = matplotlib.backends.backend_pdf.PdfPages(address + "results/Features_results.pdf"); 
-    for i in range(len(data_reverse[0])):
-        for j in range(i,len(data_reverse[0])):
+    for i in range(len(selected_Features)):
+        for j in range(i,len(selected_Features)):
             if(INCLUDING_DATA_PLOT_2):
                 fig = plt.figure();
                 plt.scatter(data_reverse[:,i], data_reverse[:,j], c=y_kmeans_reverse, s=50, cmap='viridis');
