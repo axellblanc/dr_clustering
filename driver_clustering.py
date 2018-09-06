@@ -40,8 +40,8 @@ from collections import Counter;
 
 K = 8;
 nb_PCA_components = 14
-nb_drivers = 1000; #nb of travels for clustering
-nb_drivers_choices = 1000; #nb of travels for choosing the PCA components and K numbers
+nb_drivers = 600000; #nb of travels for clustering
+nb_drivers_choices = 600000; #nb of travels for choosing the PCA components and K numbers
 k_range = 20; #The range in which we will search the best K
 address = '/Users/axel/Desktop/driver_classification/';
 
@@ -50,16 +50,16 @@ address = '/Users/axel/Desktop/driver_classification/';
 DATA_OBSERVATION = False;
 PCA_CHOICE = False;
 K_CHOICE = False;
-CLUSTER_COMPOSITION = False;
-PCA_RESULTS = False;
+CLUSTER_COMPOSITION = True;
+PCA_RESULTS = True;
 INCLUDING_DATA_PLOT = False; #Not really sensible, would take too long
 FEATURES_RESULTS = True;
 INCLUDING_DATA_PLOT_2 = False;#Same as just above
 VARIANCES_PER_FEATURES = True;
-GROUP_BY_ID = True;
+GROUP_BY_ID = False;
 CORRELATION_WITH_CRASHES = True;
 INCLUDE_CRASHES = False;
-FULL_RUN = True;
+FULL_RUN = False;
 
 
 
@@ -70,34 +70,34 @@ FULL_RUN = True;
 
 selected_Features = [
 'loc_speed_cnt_100',
+'loc_speed_cnt_110',
 'loc_speed_cnt_115',
+'loc_speed_cnt_120',
 'loc_speed_dur_100',
+'loc_speed_dur_110',
 'loc_speed_dur_115',
+'loc_speed_dur_120',
 'handling_cnt_low',
 'handling_cnt_high',
+'handling_cnt_driver_high',
+'handling_cnt_non_driver',
+'handling_cnt_total',
 'glb_speed_cnt',
 'glb_speed_dur',
 'hard_braking_cnt',
 'rapid_acceleration_cnt',
-'crash_cnt',
-'handling_cnt_driver_high',
-'handling_cnt_total',
-'fix_speed_cnt_65',
-'fix_speed_dur_65',
-'crash_cnt_low',
-'crash_cnt_med',
-'crash_cnt_high',
-'loc_speed_cnt_120',
-'loc_speed_cnt_110',
-'loc_speed_dur_110',
-'loc_speed_dur_120',
-'glb_speed_lim',
 'max_speed',
-'handling_cnt_non_driver',
 'start_time_local',
 'end_time_local'
 ];
         
+if (not GROUP_BY_ID):
+    selected_Features.append('fix_speed_cnt_65');
+    selected_Features.append('fix_speed_dur_65');
+    print('clustering on the travels (not on the drivers)');
+else:
+    print('clustering on the drivers (not on the drivers)');
+
 
 total_Features = [
 'trip_id',
@@ -166,11 +166,7 @@ distance_features = [#Features that will be divided by the distance of the trip
 'glb_speed_cnt',
 'hard_braking_cnt',
 'rapid_acceleration_cnt',
-'crash_cnt',
 'fix_speed_cnt_65',
-'crash_cnt_low',
-'crash_cnt_med',
-'crash_cnt_high',
         ];
         
 time_features = [#Features that will be divided by the duration of the trip
@@ -203,9 +199,14 @@ def group_by_id(data):
                 if(data[i,0] == id[j]):
                     id[j] = data[i].copy();
                     break;
+    for i in range(len(id)):
+        for j in range(len(id[0])):
+            id[i][j] = float(id[i][j]);
+    id = np.array(id)
+    id = id.astype(float);
     for l in range(len(id)):
-        id[l] = id[l]/a[id[l][0]];
-    return np.array(id);
+        id[l,1:] = id[l,1:]/float(a[id[l][0]]);
+    return id;
                     
                     
             
@@ -216,19 +217,20 @@ def getdata(file_name, selected_features, nb_drivers):
     with open(file_name) as csv_file:
         csv_reader = csv.DictReader(csv_file);
         line_count = 0;
+        crash_cnt = 0;
         for row in csv_reader:
+            distance = float(row['distance']);
             if(row['mode_of_transportation'] == 'car' and
                float(row['loc_speed_cnt_100']) >= float(row['loc_speed_cnt_110']) and float(row['loc_speed_cnt_110'])>= float(row['loc_speed_cnt_115']) and float(row['loc_speed_cnt_115'])>= float(row['loc_speed_cnt_120']) and
                float(row['loc_speed_cnt_120']) < 10 and float(row['loc_speed_cnt_100']) < 40 and
-               float(row['distance']) < 250000 and
+               distance < 250000 and
                float(row['max_speed']) < 120):
                 line = [];
                 if(GROUP_BY_ID):
                     line.append(float(row['user_id']));
-                distance = float(row['distance']);
                 for feature in selected_features:
                     if (feature in distance_features):
-                        line.append(float(row[feature])/float(row['distance']));
+                        line.append(float(row[feature])/distance);
                     elif(feature in time_features):
                         line.append(float(row[feature])/float(row['duration']));
                     elif(feature == 'glb_speed_lim'):
@@ -237,6 +239,8 @@ def getdata(file_name, selected_features, nb_drivers):
                         line.append(float(row[feature][11:13]));
                     else:
                         line.append(float(row[feature]));
+                if(float(row['crash_cnt'])>0):
+                    crash_cnt += float(row['crash_cnt']);
                 if(not INCLUDE_CRASHES):
                     line.append(float(row['crash_cnt']));
                     line.append(float(row['crash_cnt_low']));
@@ -245,11 +249,24 @@ def getdata(file_name, selected_features, nb_drivers):
                 data.append(line);
                 line_count += 1;
             if(line_count == nb_drivers):
-                break;a
-        print(f'Processed {line_count} lines.')
+                break;
+        print(f'Processed {line_count} trips.')
+        print(crash_cnt, 'accidents have been detected for those trips')
     data = np.array(data);
     if(GROUP_BY_ID):
-            data2 = group_by_id(data);
+        data2 = group_by_id(data);
+        l_id = data2[:,0];
+        for g in range(len(l_id)):
+            if (l_id[g] in l_id[g+1:]):
+                print("Twice the same driver id !!!!!!!!!");
+                return 0,0;
+        print("check : each driver id is unique");
+    else:
+        data2 = data;
+
+    
+    
+        
     if(not INCLUDE_CRASHES):
         crashes = data2[:,-4:].copy();
         np.delete(data2, 0, 1);
@@ -257,8 +274,9 @@ def getdata(file_name, selected_features, nb_drivers):
         np.delete(data2, -1, 1); 
         np.delete(data2, -1, 1);
         np.delete(data2, -1, 1);
-    else:crashes = ['no need for crashes if we take them into account in the clustering'];
-    return np.array(StandardScaler().fit_transform(data2)), crashes;  
+    else:
+        crashes = ['no need for crashes if we take them into account in the clustering'];
+    return data2, crashes;  
  
 
 
@@ -278,7 +296,7 @@ FULL_RUN ):
 if(PCA_CHOICE or
 K_CHOICE ):
     data_choices, crashes_choices = getdata(address + 'report_trip_201808211027.csv', selected_Features, nb_drivers_choices);
-
+    data_choices = np.array(StandardScaler().fit_transform(data_choices));
 
 
 
@@ -299,21 +317,30 @@ if(FULL_RUN):
 if(DATA_OBSERVATION):
     pdf_data_obs = matplotlib.backends.backend_pdf.PdfPages(address + "results/data_observation.pdf"); 
     for i in range(len(selected_Features)):
-        fig = plt.figure();
-        x = [];
-        y = [];
-        for k in range(len(data)):
-            x.append(data[k][i]);
-            y.append(data[k][i]);
-        plt.scatter(x,y);
-        plt.xlabel(selected_Features[i]);
-        plt.ylabel(selected_Features[i]);
-        plt.title('Observation of the selected features, with' + str(nb_drivers) + " events");
-        pdf_data_obs.savefig(fig);
-        plt.show();
+        for j in range(i, len(selected_Features)):
+            fig = plt.figure();
+            x = [];
+            y = [];
+            for k in range(len(data)):
+                x.append(data[k][i]);
+                y.append(data[k][j]);
+            plt.scatter(x,y);
+            plt.xlabel(selected_Features[i]);
+            plt.ylabel(selected_Features[j]);
+            plt.title('Observation of the selected features, with' + str(nb_drivers) + " events");
+            pdf_data_obs.savefig(fig);
+            plt.show();
     pdf_data_obs.close();
     
-    
+if(CLUSTER_COMPOSITION or
+PCA_RESULTS or
+FEATURES_RESULTS or 
+VARIANCES_PER_FEATURES or
+CORRELATION_WITH_CRASHES or
+INCLUDE_CRASHES or
+FULL_RUN ): 
+    data = np.array(StandardScaler().fit_transform(data));
+
 
 #4 : Chose the P.C.A.
 
@@ -424,6 +451,7 @@ if(CLUSTER_COMPOSITION):
     plt.ylabel('Population');
     plt.title('Repartition of the dataset');
     pdf_cluster_composition.savefig(fig);
+    print("Cluster composition: " , occ)
     plt.plot();
     pdf_cluster_composition.close();
 
@@ -474,9 +502,12 @@ if(PCA_RESULTS):
     # create a new PDF with Reportlab
     can = canvas.Canvas(packet, pagesize=letter);
     can.drawString(10, 200, "With :");
-    can.drawString(10, 190, "PCA: "+str(nb_PCA_components)+"K :" + str(K)  );
-    can.drawString(10, 180, "We obtained the following results:" );
-    can.drawString(10, 170,  "Variance retained with the P.C.A. : " + str(sum(pca.explained_variance_ratio_)*100) + "%");
+    can.drawString(10, 190, "PCA: "+str(nb_PCA_components)+"K: " + str(K)  );
+    can.drawString(10, 180, "We obtained the following results: " );
+    can.drawString(10, 170,  "Variance retained with the P.C.A.: " + str(sum(pca.explained_variance_ratio_)*100) + "%");
+    if(CLUSTER_COMPOSITION):
+        can.drawString(10, 160, "Population of the clusters: " );
+        can.drawString(0, 150,str(occ));
     can.save();
     #move to the beginning of the StringIO buffer
     packet.seek(0);
@@ -518,11 +549,12 @@ if(FEATURES_RESULTS or VARIANCES_PER_FEATURES or CORRELATION_WITH_CRASHES):
     y_kmeans_reverse = algorithms['kmeans'].predict(data_reverse);
     centers_reverse = algorithms['kmeans'].cluster_centers_;
 
+
+
 if(CORRELATION_WITH_CRASHES):
     crashes_names = ['crash_cnt','crash_cnt_low',
 'crash_cnt_med',
 'crash_cnt_high'];
-
     pdf_crashes_results = matplotlib.backends.backend_pdf.PdfPages(address + "results/correlation_with_crashes.pdf"); 
     l = [[0 for i in range(K)] for j in range(4)];
     for i in range(len(y_kmeans_reverse)):
@@ -535,7 +567,9 @@ if(CORRELATION_WITH_CRASHES):
         plt.title('Correlation between the clusters and the '+ crashes_names[i]);
         plt.bar(range(K), l[i], color = colors);
         pdf_crashes_results.savefig(fig);
-    pdf_crashes_results.close()
+    pdf_crashes_results.close();
+    
+    
 
 if(FEATURES_RESULTS):
     pdf_features_results = matplotlib.backends.backend_pdf.PdfPages(address + "results/Features_results.pdf"); 
@@ -578,4 +612,5 @@ if(VARIANCES_PER_FEATURES):
 
 
 
+print(occ)
 
